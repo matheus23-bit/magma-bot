@@ -1,0 +1,19 @@
+# Framework web
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# HTTP requests (se seu bot faz chamadas externas)
+httpx>=0.26.0
+aiohttp>=3.9.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+
+# Se usar banco de dados
+# psycopg2-binary>=2.9.0  # PostgreSQL
+# sqlalchemy>=2.0.0
+
+# Se usar Telegram/Discord/etc
+# python-telegram-bot>=20.0
+# discord.py>=2.3.0
