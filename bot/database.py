@@ -6,14 +6,20 @@ from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.environ["DATABASE_URL"]
-
+# =========================
+# FIX: não quebrar se não existir ENV
+# =========================
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 class Database:
     def __init__(self):
         self.pool = None
 
     async def connect(self):
+        if not DATABASE_URL:
+            logger.warning("DATABASE_URL não definida - modo sem banco ativo")
+            return
+
         if not self.pool:
             self.pool = await asyncpg.create_pool(DATABASE_URL)
             await self.create_tables()
@@ -47,6 +53,8 @@ class Database:
             """)
 
     async def _ensure_connected(self):
+        if not DATABASE_URL:
+            return
         if not self.pool:
             await self.connect()
 
@@ -64,6 +72,9 @@ class Database:
         uploaded_by: int
     ):
         await self._ensure_connected()
+        if not self.pool:
+            return
+
         async with self.pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO videos (
@@ -81,6 +92,9 @@ class Database:
 
     async def get_video(self, video_id: str) -> Optional[Dict]:
         await self._ensure_connected()
+        if not self.pool:
+            return None
+
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT * FROM videos WHERE video_id = $1", video_id
@@ -89,6 +103,9 @@ class Database:
 
     async def increment_views(self, video_id: str):
         await self._ensure_connected()
+        if not self.pool:
+            return
+
         async with self.pool.acquire() as conn:
             await conn.execute(
                 "UPDATE videos SET view_count = view_count + 1 WHERE video_id = $1",
@@ -97,6 +114,9 @@ class Database:
 
     async def get_all_videos(self) -> List[Dict]:
         await self._ensure_connected()
+        if not self.pool:
+            return []
+
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT * FROM videos ORDER BY created_at DESC"
@@ -105,6 +125,9 @@ class Database:
 
     async def get_offline_videos(self) -> List[Dict]:
         await self._ensure_connected()
+        if not self.pool:
+            return []
+
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT * FROM videos WHERE is_online = FALSE ORDER BY created_at DESC"
@@ -113,6 +136,9 @@ class Database:
 
     async def set_video_status(self, video_id: str, is_online: bool):
         await self._ensure_connected()
+        if not self.pool:
+            return
+
         async with self.pool.acquire() as conn:
             await conn.execute(
                 "UPDATE videos SET is_online = $1, last_checked = NOW() WHERE video_id = $2",
@@ -121,11 +147,17 @@ class Database:
 
     async def count_videos(self) -> int:
         await self._ensure_connected()
+        if not self.pool:
+            return 0
+
         async with self.pool.acquire() as conn:
             return await conn.fetchval("SELECT COUNT(*) FROM videos")
 
     async def delete_video(self, video_id: str) -> bool:
         await self._ensure_connected()
+        if not self.pool:
+            return False
+
         async with self.pool.acquire() as conn:
             result = await conn.execute(
                 "DELETE FROM videos WHERE video_id = $1", video_id
@@ -134,6 +166,15 @@ class Database:
 
     async def get_stats(self) -> Dict:
         await self._ensure_connected()
+        if not self.pool:
+            return {
+                "total": 0,
+                "online": 0,
+                "offline": 0,
+                "total_views": 0,
+                "last_upload": None
+            }
+
         async with self.pool.acquire() as conn:
             total = await conn.fetchval("SELECT COUNT(*) FROM videos")
             online = await conn.fetchval("SELECT COUNT(*) FROM videos WHERE is_online = TRUE")
@@ -150,8 +191,10 @@ class Database:
             }
 
     async def export_backup(self) -> Dict:
-        """Exportar todos os dados para backup."""
         await self._ensure_connected()
+        if not self.pool:
+            return {"videos": [], "config": []}
+
         async with self.pool.acquire() as conn:
             videos = await conn.fetch("SELECT * FROM videos ORDER BY created_at")
             configs = await conn.fetch("SELECT * FROM config")
@@ -164,8 +207,10 @@ class Database:
             }
 
     async def import_backup(self, backup_data: Dict) -> int:
-        """Importar dados de um backup."""
         await self._ensure_connected()
+        if not self.pool:
+            return 0
+
         count = 0
 
         async with self.pool.acquire() as conn:
@@ -194,15 +239,5 @@ class Database:
                     count += 1
                 except Exception as e:
                     logger.error(f"Erro ao importar vídeo {v.get('video_id')}: {e}")
-
-            for c in backup_data.get("config", []):
-                try:
-                    await conn.execute("""
-                        INSERT INTO config (key, value, updated_at)
-                        VALUES ($1, $2, $3)
-                        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-                    """, c["key"], c["value"], c.get("updated_at", datetime.now()))
-                except Exception as e:
-                    logger.error(f"Erro ao importar config {c.get('key')}: {e}")
 
         return count
