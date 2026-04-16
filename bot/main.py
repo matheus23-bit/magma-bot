@@ -1,65 +1,96 @@
-"""
-Entrypoint principal: sobe o bot do Telegram e o servidor web em paralelo.
-"""
+@app.get("/player/{video_id}", response_class=HTMLResponse)
+async def player_page(video_id: str, request: Request):
+    video = await get_video(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Vídeo não encontrado")
 
-import asyncio
-import threading
-import logging
-import os
-import uvicorn
+    await increment_views(video_id)
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+    title = video["title"]
+    video_url = video.get("cloudinary_url")  # 🔥 NOVO CAMPO
 
-logger = logging.getLogger(__name__)
+    if not video_url:
+        raise HTTPException(status_code=404, detail="Vídeo sem URL")
 
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{title}</title>
 
-# =========================
-# WEB SERVER THREAD
-# =========================
-def run_web():
-    """Rodar o servidor FastAPI em uma thread separada."""
-    port = int(os.environ.get("PORT", 8000))
+        <style>
+            body {{
+                margin:0;
+                background:#0a0a0f;
+                color:white;
+                font-family:sans-serif;
+                display:flex;
+                justify-content:center;
+                align-items:center;
+                min-height:100vh;
+            }}
 
-    config = uvicorn.Config(
-        "server:app",
-        host="0.0.0.0",
-        port=port,
-        log_level="info",
-        loop="asyncio"
-    )
+            .container {{
+                width:100%;
+                max-width:900px;
+                padding:20px;
+            }}
 
-    server = uvicorn.Server(config)
+            .box {{
+                background:#1c1c27;
+                border-radius:12px;
+                padding:20px;
+                text-align:center;
+            }}
 
-    # FIX IMPORTANTE: não usar asyncio.run dentro de thread
-    asyncio.set_event_loop(asyncio.new_event_loop())
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(server.serve())
+            video {{
+                width:100%;
+                border-radius:12px;
+                background:black;
+            }}
 
+            .title {{
+                font-size:20px;
+                margin-bottom:15px;
+            }}
 
-# =========================
-# MAIN
-# =========================
-def main():
-    web_thread = threading.Thread(target=run_web, daemon=True)
-    web_thread.start()
+            .btn {{
+                display:inline-block;
+                padding:12px 18px;
+                background:#229ED9;
+                color:white;
+                text-decoration:none;
+                border-radius:8px;
+                font-weight:bold;
+                margin-top:15px;
+            }}
+        </style>
+    </head>
 
-    logger.info(f"Servidor web iniciado na porta {os.environ.get('PORT', 8000)}")
+    <body>
+        <div class="container">
+            <div class="box">
 
-    try:
-        from bot import main as bot_main
-        logger.info("Iniciando bot do Telegram...")
-        bot_main()
+                <div class="title">{title}</div>
 
-    except Exception as e:
-        logger.error(f"Erro ao iniciar bot: {e}")
-        raise
+                <!-- PLAYER REAL (CLOUDINARY / CDN) -->
+                <video controls autoplay>
+                    <source src="{video_url}" type="video/mp4">
+                    Seu navegador não suporta vídeo.
+                </video>
 
+                <br>
 
-# =========================
-# ENTRYPOINT
-# =========================
-if __name__ == "__main__":
-    main()
+                <a class="btn" href="{video_url}" target="_blank">
+                    Abrir vídeo direto
+                </a>
+
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return HTMLResponse(content=html)
