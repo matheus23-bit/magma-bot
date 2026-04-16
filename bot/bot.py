@@ -347,6 +347,8 @@ async def monitor_links(app: Application):
             logger.error(f"Erro no monitor: {e}")
 
 
+# ... [todo o resto do arquivo igual] ...
+
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -363,8 +365,11 @@ def main():
     app.add_handler(CallbackQueryHandler(callback_handler))
 
     # Iniciar monitor em background
-    loop = asyncio.get_event_loop()
-    loop.create_task(monitor_links(app))
+    try:
+        asyncio.create_task(monitor_links(app))
+    except RuntimeError:
+        # Loop ainda não está rodando, o monitor será iniciado pelo polling
+        pass
 
     logger.info("Bot iniciado!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
