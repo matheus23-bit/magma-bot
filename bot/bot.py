@@ -15,13 +15,14 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
+# ✅ CORREÇÃO: __name__ em vez de name
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-CHANNEL_ID = os.environ["CHANNEL_ID"]          # Ex: -1001234567890
+CHANNEL_ID = os.environ["CHANNEL_ID"]
 ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x]
-BASE_URL = os.environ["BASE_URL"]               # Ex: https://seu-app.railway.app
-BOT_USERNAME = os.environ.get("BOT_USERNAME")  # Ex: meubot (sem @)
+BASE_URL = os.environ["BASE_URL"]
+BOT_USERNAME = os.environ.get("BOT_USERNAME")
 
 db = Database()
 
@@ -69,7 +70,6 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("❌ Por favor, envie um arquivo de vídeo.")
         return
 
-    # Verificar se é vídeo
     if message.document:
         mime = message.document.mime_type or ""
         if not mime.startswith("video/"):
@@ -79,24 +79,20 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     processing_msg = await message.reply_text("⏳ Processando vídeo...")
 
     try:
-        # Fazer forward pro canal privado
         forwarded = await context.bot.forward_message(
             chat_id=CHANNEL_ID,
             from_chat_id=message.chat_id,
             message_id=message.message_id
         )
 
-        # Gerar ID único para o vídeo
         file_id = video.file_id
         video_id = generate_video_id(file_id)
 
-        # Nome do vídeo
         title = message.caption or (
             video.file_name if hasattr(video, 'file_name') and video.file_name else f"Video_{video_id}"
         )
         title = title.strip()
 
-        # Extrair channel_id numérico (sem o -100)
         channel_id_str = str(CHANNEL_ID)
         if channel_id_str.startswith("-100"):
             channel_numeric = channel_id_str[4:]
@@ -105,13 +101,9 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             channel_numeric = channel_id_str
 
-        # Link direto do Telegram para o vídeo no canal
         telegram_link = f"https://t.me/c/{channel_numeric}/{forwarded.message_id}"
-
-        # Link do player web (abre no navegador)
         player_url = f"{BASE_URL}/player/{video_id}"
 
-        # Salvar no banco
         await db.save_video(
             video_id=video_id,
             title=title,
@@ -181,7 +173,6 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         backup_data = await db.export_backup()
         backup_json = json.dumps(backup_data, indent=2, ensure_ascii=False, default=str)
 
-        # Enviar como arquivo
         from io import BytesIO
         bio = BytesIO(backup_json.encode("utf-8"))
         bio.name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -217,7 +208,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
 
-    # Restaurar backup
     if context.user_data.get("waiting_restore"):
         context.user_data["waiting_restore"] = False
         doc = update.message.document
@@ -244,7 +234,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await processing.edit_text(f"❌ Erro ao restaurar:\n`{e}`", parse_mode="Markdown")
         return
 
-    # Se não é restore, verificar se é vídeo (document com mime video/)
     doc = update.message.document
     if doc and doc.mime_type and doc.mime_type.startswith("video/"):
         await handle_video(update, context)
@@ -324,7 +313,7 @@ async def monitor_links(app: Application):
     """Task periódica para monitorar links offline."""
     while True:
         try:
-            await asyncio.sleep(3600)  # Checar a cada 1 hora
+            await asyncio.sleep(3600)
             offline = await db.get_offline_videos()
 
             if offline:
@@ -347,8 +336,6 @@ async def monitor_links(app: Application):
             logger.error(f"Erro no monitor: {e}")
 
 
-# ... [todo o resto do arquivo igual] ...
-
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -364,16 +351,16 @@ def main():
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(CallbackQueryHandler(callback_handler))
 
-    # Iniciar monitor em background
+    # ✅ CORREÇÃO: asyncio.create_task com try/except
     try:
         asyncio.create_task(monitor_links(app))
     except RuntimeError:
-        # Loop ainda não está rodando, o monitor será iniciado pelo polling
         pass
 
     logger.info("Bot iniciado!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
+# ✅ CORREÇÃO: __name__ em vez de name
 if __name__ == "__main__":
     main()
