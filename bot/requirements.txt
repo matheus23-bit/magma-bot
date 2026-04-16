@@ -1,29 +1,17 @@
-# ===== WEB SERVER (FastAPI + Uvicorn) =====
+# ===== WEB SERVER =====
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 
-# ===== TELEGRAM BOT API (v20+) =====
-python-telegram-bot[job-queue]>=20.6
+# ===== TELEGRAM BOT =====
+python-telegram-bot>=20.6
 
-# ===== BANCO DE DADOS - POSTGRESQL =====
-psycopg2-binary>=2.9.9
+# ===== BANCO POSTGRES =====
 asyncpg>=0.29.0
-sqlalchemy[asyncio]>=2.0.25
-alembic>=1.13.1
 
-# ===== HTTP CLIENTS (para requisições assíncronas) =====
-httpx>=0.26.0
-aiohttp>=3.9.1
+# ===== CLOUDINARY =====
+cloudinary>=1.36.0
 
-# ===== CONFIGURAÇÃO E VALIDAÇÃO =====
+# ===== UTIL =====
 python-dotenv>=1.0.0
-pydantic>=2.5.2
-pydantic-settings>=2.1.0
-
-# ===== UTILITÁRIOS =====
 aiofiles>=23.2.1
-loguru>=0.7.2
 python-multipart>=0.0.6
-
-# ===== PRODUÇÃO (opcional) =====
-gunicorn>=21.2.0
