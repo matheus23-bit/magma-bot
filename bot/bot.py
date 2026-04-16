@@ -5,12 +5,14 @@ import hashlib
 import cloudinary
 import cloudinary.uploader
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    filters, ContextTypes, CallbackQueryHandler
+    filters, ContextTypes
 )
 from database import Database
+import tempfile
+import os
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -23,7 +25,6 @@ logger = logging.getLogger(__name__)
 # ENV
 # ======================
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-CHANNEL_ID = os.environ["CHANNEL_ID"]
 ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x]
 BASE_URL = os.environ["BASE_URL"]
 
@@ -58,16 +59,14 @@ def generate_video_id(file_id: str) -> str:
 # UPLOAD CLOUDINARY
 # ======================
 async def upload_to_cloudinary(file_path: str) -> str:
-    loop = asyncio.get_event_loop()
-
     def upload():
-        result = cloudinary.uploader.upload_large(
+        result = cloudinary.uploader.upload(
             file_path,
             resource_type="video"
         )
         return result["secure_url"]
 
-    return await loop.run_in_executor(None, upload)
+    return await asyncio.to_thread(upload)
 
 
 # ======================
@@ -75,6 +74,7 @@ async def upload_to_cloudinary(file_path: str) -> str:
 # ======================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+
     if not is_admin(user.id):
         await update.message.reply_text("❌ Sem permissão")
         return
@@ -87,6 +87,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ======================
 async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+
     if not is_admin(user.id):
         return
 
@@ -96,24 +97,36 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not video:
         return
 
-    processing = await msg.reply_text("⏳ enviando para Cloudinary...")
+    processing = await msg.reply_text("⏳ baixando vídeo...")
+
+    tmp_file = None
 
     try:
-        # 1. baixar arquivo do telegram
+        # ======================
+        # DOWNLOAD TELEGRAM
+        # ======================
         file = await context.bot.get_file(video.file_id)
-        file_path = f"/tmp/{video.file_id}.mp4"
-        await file.download_to_drive(file_path)
 
-        # 2. upload cloudinary
-        cloud_url = await upload_to_cloudinary(file_path)
+        tmp_dir = tempfile.gettempdir()
+        tmp_file = os.path.join(tmp_dir, f"{video.file_id}.mp4")
+
+        await file.download_to_drive(tmp_file)
+
+        await processing.edit_text("☁️ enviando para Cloudinary...")
+
+        # ======================
+        # UPLOAD CLOUDINARY
+        # ======================
+        cloud_url = await upload_to_cloudinary(tmp_file)
 
         video_id = generate_video_id(video.file_id)
-
         title = msg.caption or f"Video_{video_id}"
 
         player_url = f"{BASE_URL}/player/{video_id}"
 
-        # 3. salvar no banco
+        # ======================
+        # SAVE DB
+        # ======================
         await db.save_video(
             video_id=video_id,
             title=title,
@@ -128,19 +141,23 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await processing.edit_text(
-            f"✅ Vídeo salvo no Cloudinary!\n\n"
+            "✅ Upload concluído!\n\n"
             f"🎬 {title}\n"
-            f"🔗 {player_url}\n"
-            f"☁️ {cloud_url}"
+            f"🔗 Player: {player_url}\n"
+            f"☁️ Cloud: {cloud_url}"
         )
 
     except Exception as e:
         logger.error(e)
         await processing.edit_text(f"❌ erro: {e}")
 
+    finally:
+        if tmp_file and os.path.exists(tmp_file):
+            os.remove(tmp_file)
+
 
 # ======================
-# BOT MAIN
+# MAIN
 # ======================
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
