@@ -1,19 +1,28 @@
-# Framework web
+# ===== WEB SERVER (FastAPI + Uvicorn) =====
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 
-# HTTP requests (se seu bot faz chamadas externas)
+# ===== TELEGRAM BOT API (v20+) =====
+python-telegram-bot[job-queue]>=20.6
+
+# ===== BANCO DE DADOS - POSTGRESQL =====
+psycopg2-binary>=2.9.9
+sqlalchemy[asyncio]>=2.0.25
+alembic>=1.13.1
+
+# ===== HTTP CLIENTS (para requisições assíncronas) =====
 httpx>=0.26.0
-aiohttp>=3.9.0
+aiohttp>=3.9.1
 
-# Utilities
+# ===== CONFIGURAÇÃO E VALIDAÇÃO =====
 python-dotenv>=1.0.0
-pydantic>=2.5.0
+pydantic>=2.5.2
+pydantic-settings>=2.1.0
 
-# Se usar banco de dados
-# psycopg2-binary>=2.9.0  # PostgreSQL
-# sqlalchemy>=2.0.0
+# ===== UTILITÁRIOS =====
+aiofiles>=23.2.1          # Para manipulação assíncrona de arquivos (backup/restore)
+loguru>=0.7.2             # Logging bonito e fácil
+python-multipart>=0.0.6   # Para upload de arquivos no FastAPI (se precisar)
 
-# Se usar Telegram/Discord/etc
-# python-telegram-bot>=20.0
-# discord.py>=2.3.0
+# ===== PRODUÇÃO (opcional, mas recomendado) =====
+gunicorn>=21.2.0          # Worker server para produção
