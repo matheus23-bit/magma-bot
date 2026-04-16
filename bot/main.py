@@ -11,6 +11,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
+# ✅ CORREÇÃO: __name__ em vez de name
 logger = logging.getLogger(__name__)
 
 
@@ -37,5 +38,6 @@ def main():
     bot_main()
 
 
+# ✅ CORREÇÃO: __name__ em vez de name
 if __name__ == "__main__":
     main()
