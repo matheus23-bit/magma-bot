@@ -6,10 +6,8 @@ from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# =========================
-# FIX: não quebrar se não existir ENV
-# =========================
 DATABASE_URL = os.environ.get("DATABASE_URL")
+
 
 class Database:
     def __init__(self):
@@ -17,7 +15,7 @@ class Database:
 
     async def connect(self):
         if not DATABASE_URL:
-            logger.warning("DATABASE_URL não definida - modo sem banco ativo")
+            logger.warning("DATABASE_URL não definida - banco desativado")
             return
 
         if not self.pool:
@@ -31,10 +29,15 @@ class Database:
                     id SERIAL PRIMARY KEY,
                     video_id VARCHAR(20) UNIQUE NOT NULL,
                     title TEXT NOT NULL,
-                    file_id TEXT NOT NULL,
+
+                    -- agora serve para Cloudinary OU fallback Telegram
+                    file_id TEXT,
+                    video_url TEXT,
+
                     telegram_message_id BIGINT,
                     telegram_channel_id BIGINT,
                     telegram_link TEXT,
+
                     player_url TEXT,
                     file_size BIGINT,
                     duration INTEGER,
@@ -58,6 +61,9 @@ class Database:
         if not self.pool:
             await self.connect()
 
+    # =========================
+    # SAVE VIDEO (CLOUDINARY READY)
+    # =========================
     async def save_video(
         self,
         video_id: str,
@@ -69,7 +75,8 @@ class Database:
         player_url: str,
         file_size: Optional[int],
         duration: Optional[int],
-        uploaded_by: int
+        uploaded_by: int,
+        video_url: Optional[str] = None
     ):
         await self._ensure_connected()
         if not self.pool:
@@ -78,18 +85,35 @@ class Database:
         async with self.pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO videos (
-                    video_id, title, file_id, telegram_message_id, telegram_channel_id,
-                    telegram_link, player_url, file_size, duration, uploaded_by
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                    video_id, title, file_id, video_url,
+                    telegram_message_id, telegram_channel_id,
+                    telegram_link, player_url,
+                    file_size, duration, uploaded_by
+                )
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+
                 ON CONFLICT (video_id) DO UPDATE SET
                     title = EXCLUDED.title,
                     player_url = EXCLUDED.player_url,
-                    telegram_link = EXCLUDED.telegram_link
+                    telegram_link = EXCLUDED.telegram_link,
+                    video_url = EXCLUDED.video_url
             """,
-            video_id, title, file_id, telegram_message_id, int(telegram_channel_id),
-            telegram_link, player_url, file_size, duration, uploaded_by
+            video_id,
+            title,
+            file_id,
+            video_url,
+            telegram_message_id,
+            int(telegram_channel_id) if telegram_channel_id else None,
+            telegram_link,
+            player_url,
+            file_size,
+            duration,
+            uploaded_by
             )
 
+    # =========================
+    # GET VIDEO
+    # =========================
     async def get_video(self, video_id: str) -> Optional[Dict]:
         await self._ensure_connected()
         if not self.pool:
@@ -97,7 +121,8 @@ class Database:
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT * FROM videos WHERE video_id = $1", video_id
+                "SELECT * FROM videos WHERE video_id = $1",
+                video_id
             )
             return dict(row) if row else None
 
@@ -123,28 +148,6 @@ class Database:
             )
             return [dict(r) for r in rows]
 
-    async def get_offline_videos(self) -> List[Dict]:
-        await self._ensure_connected()
-        if not self.pool:
-            return []
-
-        async with self.pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM videos WHERE is_online = FALSE ORDER BY created_at DESC"
-            )
-            return [dict(r) for r in rows]
-
-    async def set_video_status(self, video_id: str, is_online: bool):
-        await self._ensure_connected()
-        if not self.pool:
-            return
-
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE videos SET is_online = $1, last_checked = NOW() WHERE video_id = $2",
-                is_online, video_id
-            )
-
     async def count_videos(self) -> int:
         await self._ensure_connected()
         if not self.pool:
@@ -160,7 +163,8 @@ class Database:
 
         async with self.pool.acquire() as conn:
             result = await conn.execute(
-                "DELETE FROM videos WHERE video_id = $1", video_id
+                "DELETE FROM videos WHERE video_id = $1",
+                video_id
             )
             return result == "DELETE 1"
 
@@ -205,39 +209,3 @@ class Database:
                 "videos": [dict(r) for r in videos],
                 "config": [dict(r) for r in configs]
             }
-
-    async def import_backup(self, backup_data: Dict) -> int:
-        await self._ensure_connected()
-        if not self.pool:
-            return 0
-
-        count = 0
-
-        async with self.pool.acquire() as conn:
-            for v in backup_data.get("videos", []):
-                try:
-                    await conn.execute("""
-                        INSERT INTO videos (
-                            video_id, title, file_id, telegram_message_id, telegram_channel_id,
-                            telegram_link, player_url, file_size, duration, uploaded_by,
-                            is_online, view_count, created_at
-                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-                        ON CONFLICT (video_id) DO UPDATE SET
-                            title = EXCLUDED.title,
-                            player_url = EXCLUDED.player_url,
-                            telegram_link = EXCLUDED.telegram_link,
-                            is_online = EXCLUDED.is_online,
-                            view_count = EXCLUDED.view_count
-                    """,
-                    v["video_id"], v["title"], v["file_id"],
-                    v.get("telegram_message_id"), v.get("telegram_channel_id"),
-                    v.get("telegram_link"), v.get("player_url"),
-                    v.get("file_size"), v.get("duration"), v.get("uploaded_by"),
-                    v.get("is_online", True), v.get("view_count", 0),
-                    v.get("created_at", datetime.now())
-                    )
-                    count += 1
-                except Exception as e:
-                    logger.error(f"Erro ao importar vídeo {v.get('video_id')}: {e}")
-
-        return count
