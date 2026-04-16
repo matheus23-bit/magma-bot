@@ -7,7 +7,7 @@ async def player_page(video_id: str, request: Request):
     await increment_views(video_id)
 
     title = video["title"]
-    telegram_link = video.get("telegram_link", "#")
+    video_url = video.get("file_id")  # agora será Cloudinary URL
 
     html = f"""
     <!DOCTYPE html>
@@ -47,6 +47,13 @@ async def player_page(video_id: str, request: Request):
                 margin-bottom:15px;
             }}
 
+            video {{
+                width:100%;
+                max-height:500px;
+                border-radius:12px;
+                background:black;
+            }}
+
             .btn {{
                 display:inline-block;
                 padding:12px 18px;
@@ -56,14 +63,6 @@ async def player_page(video_id: str, request: Request):
                 border-radius:8px;
                 font-weight:bold;
                 margin-top:15px;
-            }}
-
-            iframe {{
-                width:100%;
-                height:500px;
-                border:none;
-                border-radius:12px;
-                background:black;
             }}
         </style>
     </head>
@@ -76,13 +75,16 @@ async def player_page(video_id: str, request: Request):
 
                 <div class="title">{title}</div>
 
-                <!-- PLAYER FALLBACK -->
-                <iframe src="{telegram_link}" allowfullscreen></iframe>
+                <!-- PLAYER CLOUDINARY -->
+                <video controls autoplay>
+                    <source src="{video_url}" type="video/mp4">
+                    Seu navegador não suporta vídeo.
+                </video>
 
                 <br>
 
-                <a class="btn" href="{telegram_link}" target="_blank">
-                    Abrir no Telegram
+                <a class="btn" href="{video_url}" target="_blank">
+                    Abrir vídeo direto
                 </a>
 
             </div>
